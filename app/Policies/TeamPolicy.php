@@ -2,14 +2,12 @@
 
 namespace App\Policies;
 
+use App\Enums\TeamPermission;
 use App\Models\Team;
 use App\Models\User;
-use Illuminate\Auth\Access\HandlesAuthorization;
 
 class TeamPolicy
 {
-    use HandlesAuthorization;
-
     /**
      * Determine whether the user can view any models.
      */
@@ -39,31 +37,47 @@ class TeamPolicy
      */
     public function update(User $user, Team $team): bool
     {
-        return $user->ownsTeam($team);
+        return $user->hasTeamPermission($team, TeamPermission::UpdateTeam);
     }
 
     /**
-     * Determine whether the user can add team members.
+     * Determine whether the user can add a member to the team.
      */
-    public function addTeamMember(User $user, Team $team): bool
+    public function addMember(User $user, Team $team): bool
     {
-        return $user->ownsTeam($team);
+        return $user->hasTeamPermission($team, TeamPermission::AddMember);
     }
 
     /**
-     * Determine whether the user can update team member permissions.
+     * Determine whether the user can update a member's role in the team.
      */
-    public function updateTeamMember(User $user, Team $team): bool
+    public function updateMember(User $user, Team $team): bool
     {
-        return $user->ownsTeam($team);
+        return $user->hasTeamPermission($team, TeamPermission::UpdateMember);
     }
 
     /**
-     * Determine whether the user can remove team members.
+     * Determine whether the user can remove a member from the team.
      */
-    public function removeTeamMember(User $user, Team $team): bool
+    public function removeMember(User $user, Team $team): bool
     {
-        return $user->ownsTeam($team);
+        return $user->hasTeamPermission($team, TeamPermission::RemoveMember);
+    }
+
+    /**
+     * Determine whether the user can invite members to the team.
+     */
+    public function inviteMember(User $user, Team $team): bool
+    {
+        return $user->hasTeamPermission($team, TeamPermission::CreateInvitation);
+    }
+
+    /**
+     * Determine whether the user can cancel invitations.
+     */
+    public function cancelInvitation(User $user, Team $team): bool
+    {
+        return $user->hasTeamPermission($team, TeamPermission::CancelInvitation);
     }
 
     /**
@@ -71,6 +85,6 @@ class TeamPolicy
      */
     public function delete(User $user, Team $team): bool
     {
-        return $user->ownsTeam($team);
+        return ! $team->is_personal && $user->hasTeamPermission($team, TeamPermission::DeleteTeam);
     }
 }

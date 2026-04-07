@@ -2,37 +2,84 @@
 
 namespace App\Models;
 
+use App\Concerns\GeneratesUniqueTeamSlugs;
+use App\Enums\TeamRole;
+use Database\Factories\TeamFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Laravel\Jetstream\Events\TeamCreated;
-use Laravel\Jetstream\Events\TeamDeleted;
-use Laravel\Jetstream\Events\TeamUpdated;
-use Laravel\Jetstream\Team as JetstreamTeam;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
-class Team extends JetstreamTeam
+#[Fillable(['name', 'slug', 'is_personal'])]
+class Team extends Model
 {
-    /** @use HasFactory<\Database\Factories\TeamFactory> */
-    use HasFactory;
+    /** @use HasFactory<TeamFactory> */
+    use GeneratesUniqueTeamSlugs, HasFactory, SoftDeletes;
 
     /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
+     * Bootstrap the model and its traits.
      */
-    protected $fillable = [
-        'name',
-        'personal_team',
-    ];
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        static::creating(function (Team $team) {
+            if (empty($team->slug)) {
+                $team->slug = static::generateUniqueTeamSlug($team->name);
+            }
+        });
+
+        static::updating(function (Team $team) {
+            if ($team->isDirty('name')) {
+                $team->slug = static::generateUniqueTeamSlug($team->name, $team->id);
+            }
+        });
+    }
 
     /**
-     * The event map for the model.
-     *
-     * @var array<string, class-string>
+     * Get the team owner.
      */
-    protected $dispatchesEvents = [
-        'created' => TeamCreated::class,
-        'updated' => TeamUpdated::class,
-        'deleted' => TeamDeleted::class,
-    ];
+    public function owner(): ?Model
+    {
+        return $this->members()
+            ->wherePivot('role', TeamRole::Owner->value)
+            ->first();
+    }
+
+    /**
+     * Get all members of this team.
+     *
+     * @return BelongsToMany<Model, $this>
+     */
+    public function members(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'team_members', 'team_id', 'user_id')
+            ->using(Membership::class)
+            ->withPivot(['role'])
+            ->withTimestamps();
+    }
+
+    /**
+     * Get all memberships for this team.
+     *
+     * @return HasMany<Membership, $this>
+     */
+    public function memberships(): HasMany
+    {
+        return $this->hasMany(Membership::class);
+    }
+
+    /**
+     * Get all invitations for this team.
+     *
+     * @return HasMany<TeamInvitation, $this>
+     */
+    public function invitations(): HasMany
+    {
+        return $this->hasMany(TeamInvitation::class);
+    }
 
     /**
      * Get the attributes that should be cast.
@@ -42,7 +89,15 @@ class Team extends JetstreamTeam
     protected function casts(): array
     {
         return [
-            'personal_team' => 'boolean',
+            'is_personal' => 'boolean',
         ];
+    }
+
+    /**
+     * Get the route key for the model.
+     */
+    public function getRouteKeyName(): string
+    {
+        return 'slug';
     }
 }
